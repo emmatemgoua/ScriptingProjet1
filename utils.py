@@ -76,10 +76,15 @@ def get_hosts_from_cidr(cidr: str) -> list:
 
 def validate_ip(ip: str) -> bool:
     try:
-        socket.getaddrinfo(ip, None)
+        ipaddress.ip_address(ip)
         return True
-    except socket.gaierror:
-        return False
+    except ValueError:
+        # On peut garder un fallback socket au cas où l'utilisateur entre un nom d'hôte
+        try:
+            socket.gethostbyname(ip)
+            return True
+        except socket.gaierror:
+            return False
 
 
 def resolve_host(host: str) -> str:
@@ -91,25 +96,21 @@ def resolve_host(host: str) -> str:
 
 def parse_port_range(port_input: str) -> tuple:
     port_input = port_input.strip()
-    if "-" not in port_input:
-        try:
-            p = int(port_input)
-            _check_port(p)
-            return (p, p)
-        except ValueError:
-            raise ValueError(f"Port invalide: '{port_input}'.")
-    parts = port_input.split("-")
-    if len(parts) != 2:
-        raise ValueError(f"Format invalide: '{port_input}'. Utilisez 'debut-fin'.")
     try:
-        a, b = int(parts[0].strip()), int(parts[1].strip())
+        if "-" in port_input:
+            parts = [int(p.strip()) for p in port_input.split("-")]
+            if len(parts) != 2: raise ValueError
+            a, b = parts
+        else:
+            a = b = int(port_input)
+        
+        # Validation groupée
+        for p in (a, b): _check_port(p)
+        if a > b: raise ValueError(f"Début ({a}) supérieur à fin ({b})")
+        
+        return (a, b)
     except ValueError:
-        raise ValueError(f"Ports non entiers: '{port_input}'.")
-    _check_port(a)
-    _check_port(b)
-    if a > b:
-        raise ValueError(f"Port début ({a}) > port fin ({b}).")
-    return (a, b)
+        raise ValueError(f"Format de port invalide : '{port_input}'. Utilisez 'port' ou 'début-fin'.")
 
 
 def _check_port(port: int) -> None:
@@ -118,13 +119,18 @@ def _check_port(port: int) -> None:
 
 
 def get_service_name(port: int) -> str:
+    # On regarde d'abord dans ta base personnalisée
+    if port in VULNERABILITIES:
+        return VULNERABILITIES[port]["service"]
+    # Sinon on demande au système
     try:
         return socket.getservbyport(port, "tcp")
-    except OSError:
+    except (OSError, OverflowError):
         return "inconnu"
 
 
 def format_duration(seconds: float) -> str:
     if seconds < 60:
         return f"{seconds:.2f}s"
-    return f"{int(seconds//60)}m {seconds%60:.2f}s"
+    minutes, secs = divmod(seconds, 60)
+    return f"{int(minutes)}m {secs:.2f}s"
