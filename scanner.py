@@ -96,8 +96,8 @@ def scan_port(ip: str, port: int, timeout: float = DEFAULT_TIMEOUT) -> PortResul
             if sock.connect_ex((ip, port)) == 0:
                 result.open = True
                 try:
-                    sock.settimeout(0.3)
-                    raw = sock.recv(1024)
+                    sock.settimeout(0.5)
+                    raw = sock.recv(512)
                     result.banner = raw.decode("utf-8", errors="replace").strip()
                 except Exception:
                     pass
