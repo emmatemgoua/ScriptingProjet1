@@ -1,40 +1,74 @@
 # checker.py
 import re
+from typing import List, Tuple
 
-def verifier_complexite(mdp):
-    score = 0
-    feedback = []
+class PasswordPolicyError(Exception):
+    """Exception personnalisée pour les violations de politique de sécurité métier."""
+    pass
 
-    # Critère 1 : Longueur [cite: 24]
-    if len(mdp) >= 12:
-        score += 2
-    elif len(mdp) >= 8:
-        score += 1
-    else:
-        feedback.append("- Trop court (min 8 caractères recommandé)")
+def valider_complexite_iso27001(mdp: str) -> bool:
+    """
+    Vérifie la conformité du mot de passe selon les standards ISO 27001.
+    
+    Critères :
+    - Minimum 12 caractères.
+    - Présence de majuscules, minuscules, chiffres et caractères spéciaux.
+    
+    :param mdp: La chaîne de caractères à analyser.
+    :return: True si le mot de passe est conforme.
+    :raises PasswordPolicyError: Si le mot de passe ne respecte pas la politique.
+    """
+    # 1. Vérification de la longueur (ISO 27001 préconise la robustesse)
+    if len(mdp) < 12:
+        raise PasswordPolicyError("La politique ISO 27001 exige un minimum de 12 caractères.")
 
-    # Critère 2 : Diversité [cite: 25]
+    # 2. Vérification de la diversité via Regex
+    # (?=.*[a-z]) : au moins une minuscule
+    # (?=.*[A-Z]) : au moins une majuscule
+    # (?=.*[0-9]) : au moins un chiffre
+    # (?=.*[!@#$%^&*]) : au moins un caractère spécial
+    regex = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*(),.?\":{}|<>]).*$"
+    
+    if not re.match(regex, mdp):
+        raise PasswordPolicyError("Le mot de passe doit contenir des majuscules, minuscules, chiffres et caractères spéciaux.")
+
+    return True
+
+def evaluer_robustesse(mdp: str) -> Tuple[str, List[str]]:
+    """
+    Analyse détaillée du mot de passe pour fournir un feedback utilisateur.
+    
+    :param mdp: Le mot de passe à tester.
+    :return: Un tuple contenant le niveau (Faible, Moyen, Fort) et une liste de conseils.
+    """
+    conseils: List[str] = []
+    score: int = 0
+
+    # Analyse de la longueur
+    if len(mdp) >= 12: score += 2
+    elif len(mdp) >= 8: score += 1
+    else: conseils.append("Augmentez la longueur au-delà de 8 caractères.")
+
+    # Analyse de la diversité
     if re.search(r"[A-Z]", mdp): score += 1
-    else: feedback.append("- Ajoutez des majuscules")
+    else: conseils.append("Ajoutez des lettres majuscules.")
     
     if re.search(r"[0-9]", mdp): score += 1
-    else: feedback.append("- Ajoutez des chiffres")
-    
+    else: conseils.append("Ajoutez des chiffres.")
+
     if re.search(r"[!@#$%^&*(),.?\":{}|<>]", mdp): score += 1
-    else: feedback.append("- Ajoutez des caractères spéciaux")
+    else: conseils.append("Ajoutez des symboles spéciaux.")
 
-    # Critère 3 : Motifs faibles [cite: 26]
-    motifs_interdits = ["123", "password", "qwerty", "admin"]
-    if any(motif in mdp.lower() for motif in motifs_interdits):
+    # Détection de motifs faibles (Audit de sécurité)
+    motifs_communs = ["123", "password", "qwerty", "admin", "azerty"]
+    if any(motif in mdp.lower() for motif in motifs_communs):
         score = max(0, score - 2)
-        feedback.append("- Contient un motif trop simple (ex: 123)")
+        conseils.append("Évitez les suites logiques ou mots courants (ex: 123, password).")
 
-    # Résultat attendu [cite: 28]
-    if score >= 4:
-        niveau = "FORT"
-    elif score >= 2:
-        niveau = "MOYEN"
+    # Détermination du niveau final
+    if score >= 5:
+        return "FORT", conseils
+    elif score >= 3:
+        return "MOYEN", conseils
     else:
-        niveau = "FAIBLE"
-        
-    return niveau, feedback
+        return "FAIBLE", conseils
